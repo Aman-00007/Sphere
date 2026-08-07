@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import pool from './db.js';
 import initDb from './initDb.js';
+import authRoutes from './routes/authRoutes.js';
 
 // Middleware
 
@@ -20,7 +21,9 @@ initDb(); //Run database setup and table creation on server start
 
 
 
-app.get("/", (req,res)=>{
+app.use('/api/auth', authRoutes);
+
+app.get('/', (req,res)=>{
     res.send(`<h1>Hello Aman</h1>`);
 });
 
