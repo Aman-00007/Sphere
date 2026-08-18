@@ -7,7 +7,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_SECRET = process.env.JWT_SECRET || "sphere_jwt_secret_key_2026";
+
+// Register user (Regular user or Admin)
 
 export const registerUser = async (req, res) => {
   const {
@@ -16,19 +18,26 @@ export const registerUser = async (req, res) => {
     email,
     phone_number,
     password,
-    role,
-    account_type,
+    role = "user",
+    account_type = "standard",
+    monthly_income = 85000,
+    employment_type = "Salaried",
+    pan_number = "ABCDE1234F",
   } = req.body;
 
   try {
+
+    if (!first_name || !last_name || !email || !phone_number || !password) {
+      return res.status(400).json({ message: "All required fields must be provided." });
+    }
     // Check if user already exists
     const existingUser = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
-      [email],
+      "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
+      [email.toLowerCase().trim(), phone_number.trim()]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "User already exists." });
+      return res.status(400).json({ message: "An account with this email or phone number already exists." });
     }
 
     // Hash the password
@@ -49,7 +58,7 @@ export const registerUser = async (req, res) => {
       ],
     );
 
-    const createdUser = newUser.rows;
+    const createdUser = newUser.rows[0];
 
     //sign a JWT token containing the user's ID ans role
 
@@ -87,7 +96,7 @@ export const loginUser = async (req, res) => {
     if (userResult.rows.length === 0) {
       return res.status(400).json({ message: "Invalid email or password." });
     }
-    const user = userResult.rows;
+    const user = userResult.rows[0];
     // Verify the password
 
     const isMatch = await bycrypt.compare(password, user.password_hash);
@@ -133,7 +142,7 @@ export const getMe = async (req, res) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    res.json({ user: userResult.rows });
+    res.json({ user: userResult.rows[0] });
   } catch (err) {
     console.error("Get profile error:", err.message);
     res
