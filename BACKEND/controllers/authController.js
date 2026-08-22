@@ -1,21 +1,17 @@
-// Handles registration, login, OTP verification, user profiles, and KYC management
-import bcrypt from "bcryptjs";
+// handle registration,login, and fetching the current authenticated user profile
+
+import bycrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { userModel } from "../models/userModel.js";
 import pool from "../db.js";
 import dotenv from "dotenv";
+import { use } from "react";
 
 dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "sphere_jwt_secret_key_2026";
 
-// In-memory OTP store (stores otp & expiry timestamp per email)
-const otpStore = new Map();
+// Register user (Regular user or Admin)
 
-/**
- * 1. Register User
- * Validates input, hashes password, calls userModel.create(), and generates OTP
- */
 export const registerUser = async (req, res) => {
   const {
     first_name,
@@ -31,196 +27,248 @@ export const registerUser = async (req, res) => {
   } = req.body;
 
   try {
+
     if (!first_name || !last_name || !email || !phone_number || !password) {
       return res.status(400).json({ message: "All required fields must be provided." });
     }
+    // Check if user already exists
+    const existingUser = await pool.query(
+      "SELECT * FROM users WHERE email = $1 OR phone_number = $2",
+      [email.toLowerCase().trim(), phone_number.trim()]
+    );
 
-    const cleanEmail = email.toLowerCase().trim();
-    const cleanPhone = phone_number.trim();
-
-    // 1. Check if user already exists using Model
-    const existingUser = await userModel.findByEmail(cleanEmail);
-    if (existingUser) {
-      return res.status(400).json({ message: "An account with this email already exists." });
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: "An account with this email or phone number already exists." });
     }
 
-    const existingPhone = await userModel.findByPhone(cleanPhone);
-    if (existingPhone) {
-      return res.status(400).json({ message: "An account with this phone number already exists." });
-    }
+    // Hash the password
+    const salt = await bycrypt.genSalt(10);
+    const password_hash = await bycrypt.hash(password, salt);
 
-    // 2. Hash password securely
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
+    // Insert new user into the database
+    const newUser = await pool.query(
+      `INSERT INTO users (first_name, last_name, email, phone_number, password_hash, role, account_type,monthly_income,employment_type,pan_number , is_verified, kyc_status) VALUES ($1, $2, $3, $4, $5, $6, $7, 750, $8, $9, $10, false, 'pending') RETURNING id, first_name, last_name, email, phone_number, role, account_type, credit_score, monthly_income, employment_type, pan_number, kyc_status, created_at`,
+      [
+        first_name.trim(),
+        last_name.trim,
+        email.toLowerCase().trim(),
+        phone_number.trim(),
+        password_hash,
+        role === "admin" ? "admin" : "user",
+        account_type,
+        parseFloat(monthly_income) || 85000,
+        employment_type,
+        pan_number.toUpperCase().trim(),
+      ]
+    );
 
-    // 3. Create user in database using Model
-    const createdUser = await userModel.create({
-      first_name,
-      last_name,
-      email: cleanEmail,
-      phone_number: cleanPhone,
-      password_hash,
-      role,
-      account_type,
-      monthly_income,
-      employment_type,
-      pan_number,
-    });
+    const createdUser = newUser.rows[0];
 
-    // 4. Generate 6-digit Verification OTP (e.g. 749201)
+    // Generate 6 digit verification Otp
+
     const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(cleanEmail, {
+    otpStore.set(email.toLowerCase().trim(), {
       otp: generatedOtp,
       expiresAt: Date.now() + 10 * 60 * 1000, // Valid for 10 minutes
     });
 
-    // Log the OTP dispatch in notifications table (Simulated SMS)
+    //Log the OTP dispatch in notifiactions table (Simulated SMS to registered phone)
+
     await pool.query(
-      `INSERT INTO notifications (user_id, type, recipient, title, message)
-       VALUES ($1, 'sms', $2, 'Verification OTP', $3)`,
+      `INSERT INTO notifications (user_id, type, recipient,title, message)
+        VALUES($1,'sms',$2, 'Verification OTP',$3) `,
       [
         createdUser.id,
-        cleanPhone,
-        `Your Sphere Banking verification OTP is ${generatedOtp}. Valid for 10 minutes. Do not share this OTP with anyone.`,
+        phone_number.trim(),
+        `Your Sphere Verification OTP is: ${generatedOtp}. It will expire in 10 minutes.
+          Do not share this OTP with anyone.`,
+        `OTP Verification`
       ]
     );
 
-    // 5. Sign JWT token
+
+    //sign a JWT token 
+
     const token = jwt.sign(
-      { id: createdUser.id, role: createdUser.role, email: createdUser.email },
+      {
+        id: createdUser.id,
+        role: createdUser.role,
+        email: createdUser.email
+      },
       JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     res.status(201).json({
-      message: `User registered successfully! A 6-digit verification OTP has been sent to ${cleanPhone}.`,
+      message: `User registered successfully., 
+      A 6-digit verification OTP has been sent to ${phone_number.trim()}.`,
       token,
       user: createdUser,
       demo_otp: generatedOtp, // Provided for easy development & sandbox testing
     });
   } catch (err) {
     console.error("Registration error:", err.message);
-    res.status(500).json({ message: "Server error during registration: " + err.message });
+    res.status(500).json({ message: "Server error during registration." + err.message });
   }
 };
 
-/**
- * 2. Verify OTP
- * Upgrades is_verified from false to true via userModel.setVerified()
- */
+// Verify OTP 
+
 export const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
 
   try {
     if (!email || !otp) {
-      return res.status(400).json({ message: "Email and OTP are required." });
+      return res.status(400).json({ message: "Email and OTP are." });
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const storedData = otpStore.get(cleanEmail);
+    const storeData = otpStore.get(cleanEmail);
 
-    // Verify OTP against store (or master sandbox test OTP '123456')
-    if (!storedData || Date.now() > storedData.expiresAt) {
-      if (otp !== "123456") {
-        return res.status(400).json({ message: "OTP has expired or is invalid. Please request a new one." });
+    // Verify OTP against store( or fallback sandbix test OTP '123456' for demo email)
+
+
+    if (!storeData || Date.now() > storeData.expiresAt) {
+      if (otp !== '123456') {
+        return res.status(400).json({
+          message: "OTP has expired or is invalid.Please request a new one"
+        });
+      } else if (storeData.otp !== otp.toString().trim() && otp !== "123456") {
+        return res.status(400).json({
+          message: "Incorrect OTP. Please check and try again."
+        });
       }
-    } else if (storedData.otp !== otp.toString().trim() && otp !== "123456") {
-      return res.status(400).json({ message: "Incorrect OTP. Please check and try again." });
     }
 
-    // Mark user as verified using Model
-    const updatedUser = await userModel.setVerified(cleanEmail);
 
-    if (!updatedUser) {
-      return res.status(404).json({ message: "User not found." });
+    //OTP Verified -> Mark user as verified in database
+
+    const updated = await pool.query(
+      `UPDATE users
+    SET is_verified = true
+    WHERE email = $1
+    RETURNING id, first_name,last_name, email, phone_number, role , is_verified, 
+    kyc_status`,
+      [cleanEmail]
+    );
+
+    if (updated.rows.length === 0) {
+      return res.status(400).json({ message: "User not found" });
     }
 
     // Clear used OTP
-    otpStore.delete(cleanEmail);
+    otpStore.del(cleanEmail);
 
     res.json({
-      message: "Phone number verified successfully! Your account is now active.",
-      user: updatedUser,
+      message: "Phone number verified succesfully! Your accoount is now active. ",
+      user: updated.rows[0],
     });
   } catch (err) {
-    console.error("OTP verification error:", err.message);
-    res.status(500).json({ message: "Server error during OTP verification: " + err.message });
+    console.error("OTP Verification error", err.message);
+    res.status(500).json({
+      message: "Server error during OTP verification" + err.message
+    });
   }
 };
 
 /**
- * 3. Resend OTP
+ * Resend OTP
+ * If the OTP is expired or missing, allow user to request a new OTP
  */
+
 export const resendOtp = async (req, res) => {
   const { email } = req.body;
 
+  const cleanEmail = email.toLowerCase().trim();
   try {
     if (!email) {
-      return res.status(400).json({ message: "Email is required." });
+      return res.status(400).json({ message: "Email id is required" });
+    }
+    //check if the user is registered
+
+    const userRes = await pool.query(
+      "SELECT id, phone_number FROM users WHERE email = $1",
+      [cleanEmail]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(400).json({ message: "User not found. " });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-    const user = await userModel.findByEmail(cleanEmail);
+    const user = userRes.rows[0];
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
+    //Generate New OTP
     const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
     otpStore.set(cleanEmail, {
       otp: newOtp,
-      expiresAt: Date.now() + 10 * 60 * 1000,
+      expiresAt: Date.now() + 10 * 60 * 1000, // Valid for 10 minutes
     });
 
+
     await pool.query(
-      `INSERT INTO notifications (user_id, type, recipient, title, message)
-       VALUES ($1, 'sms', $2, 'Resent Verification OTP', $3)`,
+      `INSERT INTO notifications
+      (user_id, type, recipient, title, message)
+      VALUES
+      ($1,'sms',$2,'Resent Verification OTP',$3)`,
       [
         user.id,
         user.phone_number,
-        `Your new Sphere verification OTP is ${newOtp}. Valid for 10 minutes.`,
+        `Your Sphere Verification OTP is: ${newOtp}. It will expire in 10 minutes.
+         Do not share this OTP with anyone.`,
       ]
     );
-
     res.json({
       message: `New verification OTP dispatched to ${user.phone_number}!`,
-      demo_otp: newOtp,
+      demo_otp: newOtp, // Provided for easy development & sandbox testing
     });
-  } catch (err) {
-    res.status(500).json({ message: "Error resending OTP: " + err.message });
+  } catch (error) {
+    console.error("OTP Resend error:", error.message);
+    res.status(500).json({ message: "Server error during OTP resend." + error.message });
   }
 };
 
+
 /**
- * 4. Login User or Admin
- * Finds user via userModel.findByEmail(), checks password with bcrypt, and signs JWT
+ * Login user or admin
+ * Authenticate user credentials and return a JWT token if valid.
  */
+
 export const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
   try {
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required." });
+      return res.staus(400).json({ message: "Email and Password are required" })
     }
 
-    const user = await userModel.findByEmail(email);
+    const cleanEmail = email.toLowerCase().trim();
 
-    if (!user) {
+    //Find user by email
+
+    const userResult = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [cleanEmail],
+    );
+
+    if (userResult.rows.length === 0) {
       return res.status(400).json({ message: "Invalid email or password." });
     }
+    const user = userResult.rows[0];
+    // Verify the password
 
-    // Verify password with bcrypt
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const isMatch = await bycrypt.compare(password, user.password_hash);
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid email or password." });
     }
 
-    // Sign JWT token
-    const token = jwt.sign(
-      { id: user.id, role: user.role, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    //sign a JWT token containing the user's ID and role
+
+    const token = jwt.sign({
+      id: user.id, role: user.role, email: user.email
+    }, JWT_SECRET, {
+      expiresIn: "7d",
+    });
 
     res.json({
       message: "Login successful.",
@@ -243,50 +291,100 @@ export const loginUser = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err.message);
-    res.status(500).json({ message: "Server error during login: " + err.message });
+    res.status(500).json({ message: "Server error during login." + err.message });
   }
 };
 
-/**
- * 5. Get Current Authenticated User Profile
- */
+/** Get the current authenticated user's profile */
+
 export const getMe = async (req, res) => {
   try {
-    const user = await userModel.findById(req.user.id);
+    const userResult = await pool.query(
+      `SELECT id, first_name, last_name, email, phone_number,
+       role, account_type,credit_score,monthly_income,employment_type,pan_number,
+       is_verified,kyc_status,created_at,
+       FROM users WHERE id = $1`,
+      [req.user.id],
+    );
 
-    if (!user) {
+    if (userResult.rows.length === 0) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    res.json({ user });
+    res.json({ user: userResult.rows[0] });
   } catch (err) {
     console.error("Get profile error:", err.message);
-    res.status(500).json({ message: "Server error while fetching profile: " + err.message });
+    res
+      .status(500)
+      .json({ message: "Server error while fetching user profile." });
   }
 };
 
 /**
- * 6. Update Profile
+ * Update Profile
  */
-export const updateProfile = async (req, res) => {
+export const updatedProfile = async (req, res) => {
+
+  const {
+    first_name, lastnam, phone_number, monthly_income, emplymenttype_type,
+    pan_number, account_type } = req.body;
+
   try {
-    const updatedUser = await userModel.updateProfile(req.user.id, req.body);
-    res.json({ message: "Profile updated successfully!", user: updatedUser });
+    const updated = await pool.query(`
+          UPDATE users
+          SET first_name = COALESCE($1, first_name),
+              last_name = COALESCE($2, last_name),
+              phone_number = COALESCE($3, phone_number),
+              monthly_income = COALESCE($4, monthly_income),
+              employment_type = COALESCE($5, employment_type),
+              pan_number = COALESCE($6, pan_number),
+              account_type = COALESCE($7, account_type),
+          WHERE id = $8
+          RETURNING id, first_name, last_name, email, phone_number,
+       role, account_type,credit_score,monthly_income,employment_type,pan_number,
+       is_verified,kyc_status`,
+
+      [
+        first_name, last_name, phone_number, monthly_income,
+        employment_type, pan_number, account_type, req.user.id
+      ]);
+
+    res.json({
+      message: "Profile updated successfully",
+      user: updated.rows[0],
+    });
   } catch (err) {
-    console.error("Update profile error:", err.message);
-    res.status(500).json({ message: "Error updating profile: " + err.message });
+    console.error("Update profile error " + err.message);
+    res.status(500).json({
+      message: "Server error while updating profile" + err.message,
+    });
   }
+
+
 };
 
 /**
- * 7. Update KYC Status
+ * Update Kyc Status (Document Verification)
  */
+
 export const updateKyc = async (req, res) => {
-  const { kyc_status = "verified" } = req.body;
+  const { kyc_status } = req.body;
   try {
-    const updated = await userModel.updateKycStatus(req.user.id, kyc_status);
-    res.json({ message: `KYC status updated to ${kyc_status}`, kyc_status: updated.kyc_status });
-  } catch (err) {
-    res.status(500).json({ message: "KYC update failed: " + err.message });
+    const result = await pool.query(
+      `UPDATE users SET kyc_status =$1 WHERE id = $2
+      RETURNING id,kyc_status`,
+      [kyc_status, req.user.id]
+    );
+    res.json({
+      message: `KYC status updated to ${kyc_status}`, kyc_status:
+        result.rows[0].kyc_status
+    });
+
+
+  } catch (error) {
+    res.status(500).json({
+      message: "KYC update failed " + error.message,
+    });
   }
 };
+
