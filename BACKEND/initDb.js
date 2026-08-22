@@ -19,7 +19,8 @@ const createTables = async () => {
         monthly_income DECIMAL(12, 2) DEFAULT 85000.00,
         employment_type VARCHAR(50) DEFAULT 'Salaried',
         pan_number VARCHAR(20) DEFAULT 'ABCDE1234F',
-        kyc_status VARCHAR(30) DEFAULT 'verified' CHECK (kyc_status IN ('pending', 'verified', 'rejected')),
+        is_verified BOOLEAN DEFAULT FALSE,
+        kyc_status VARCHAR(30) DEFAULT 'pending' CHECK (kyc_status IN ('pending', 'verified', 'rejected')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
