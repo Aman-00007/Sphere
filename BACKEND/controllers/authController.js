@@ -10,6 +10,9 @@ dotenv.config();
 
 const JWT_SECRET = process.env.JWT_SECRET || "sphere_jwt_secret_key_2026";
 
+// In-memory store for OTPs (in production, use Redis)
+export const otpStore = new Map();
+
 // Register user (Regular user or Admin)
 
 export const registerUser = async (req, res) => {
