@@ -11,7 +11,7 @@ import { bankProductModel } from "../models/bankProductModel.js";
 export const listBankProducts = async (req, res) => {
 
   try {
-    const products = await bankProductModel.findAll(req.query);
+    const products = await bankProductModel.findProducts(req.query);
     res.json({ count: products.length, products });
 
   } catch (err) {
@@ -71,7 +71,7 @@ export const getRecommendations = async (req, res) => {
       monthlyIncome = parseFloat(req.user.monthly_income) || 85000;
     }
 
-    const products = await bankProductModel.findAll({ loan_type });
+    const products = await bankProductModel.findProducts({ loan_type });
     if (products.length == 0) {
       return res.json({ recommendations: [] });
     }
