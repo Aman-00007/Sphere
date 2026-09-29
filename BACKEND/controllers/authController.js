@@ -47,10 +47,10 @@ export const registerUser = async (req, res) => {
 
     // Insert new user into the database
     const newUser = await pool.query(
-      `INSERT INTO users (first_name, last_name, email, phone_number, password_hash, role, account_type,monthly_income,employment_type,pan_number , is_verified, kyc_status) VALUES ($1, $2, $3, $4, $5, $6, $7, 750, $8, $9, $10, false, 'pending') RETURNING id, first_name, last_name, email, phone_number, role, account_type, credit_score, monthly_income, employment_type, pan_number, kyc_status, created_at`,
+      `INSERT INTO users (first_name, last_name, email, phone_number, password_hash, role, account_type, monthly_income, employment_type, pan_number, is_verified, kyc_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false, 'pending') RETURNING id, first_name, last_name, email, phone_number, role, account_type, credit_score, monthly_income, employment_type, pan_number, kyc_status, created_at`,
       [
         first_name.trim(),
-        last_name.trim,
+        last_name.trim(),
         email.toLowerCase().trim(),
         phone_number.trim(),
         password_hash,
