@@ -159,7 +159,7 @@ export const verifyOtp = async (req, res) => {
     }
 
     // Clear used OTP
-    otpStore.del(cleanEmail);
+    otpStore.delete(cleanEmail);
 
     res.json({
       message: "Phone number verified succesfully! Your accoount is now active. ",
