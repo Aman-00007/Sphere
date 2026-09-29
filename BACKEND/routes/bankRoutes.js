@@ -15,7 +15,7 @@ const router = express.Router();
 // Public routes
 router.get("/products", listBankProducts);
 router.get("/products/:id", getBankProductById);
-router.get("/recommendations",getRecommendations);
+router.get("/recommendations", getRecommendations);
 
 // Admin routes (require authentication and admin role)
 router.post("/products", verifyToken, checkAdminRole, createBankProduct);
