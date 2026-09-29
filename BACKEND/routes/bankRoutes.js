@@ -7,8 +7,7 @@ import {
     deleteBankProduct,
     getRecommendations,
 } from "../controllers/bankControllers.js";
-import { verifyToken } from "../middleware/authMiddleware.js";
-import { checkAdminRole } from "../middleware/adminMiddleware.js";
+import { verifyToken, checkAdminRole } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
