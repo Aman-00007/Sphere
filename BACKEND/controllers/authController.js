@@ -78,14 +78,13 @@ export const registerUser = async (req, res) => {
     //Log the OTP dispatch in notifiactions table (Simulated SMS to registered phone)
 
     await pool.query(
-      `INSERT INTO notifications (user_id, type, recipient,title, message)
-        VALUES($1,'sms',$2, 'Verification OTP',$3) `,
+      `INSERT INTO notifications (user_id, type, recipient, title, message)
+        VALUES($1, 'sms', $2, $3, $4)`,
       [
         createdUser.id,
         phone_number.trim(),
-        `Your Sphere Verification OTP is: ${generatedOtp}. It will expire in 10 minutes.
-          Do not share this OTP with anyone.`,
-        `OTP Verification`
+        `OTP Verification`,
+        `Your Sphere Verification OTP is: ${generatedOtp}. It will expire in 10 minutes. Do not share this OTP with anyone.`
       ]
     );
 
