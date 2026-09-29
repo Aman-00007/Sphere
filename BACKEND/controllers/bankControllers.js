@@ -136,14 +136,14 @@ export const getRecommendations = async (req, res) => {
 
     //Sort highest match first
 
-    scoreedProducts.sort((a, b) => b.matchScore - a.matchScore);
+    scoreProducts.sort((a, b) => b.match_score - a.match_score);
 
     res.json({
       user_credit_score: creditScore,
       user_monthly_income: monthlyIncome,
       requested_amount: amount,
       requested_tenure_months: tenure,
-      recommendations: scoredProducts,
+      recommendations: scoreProducts,
     });
 
   } catch (err) {
