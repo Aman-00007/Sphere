@@ -156,7 +156,7 @@ const seedDefaultData = async () => {
             await pool.query(`
                     INSERT INTO users (first_name,last_name,email,phone_number,password_hash,role,
                     account_type,credit_score, monthly_income,employment_type,pan_number,
-                    kyc_status,created_at) VALUES
+                    kyc_status) VALUES
                     ('Aman','Rawat','admin@sphere.com','+918888888888', $1, 'admin', 'administrator', 820, 150000.00, 'Banking Administrator', 'ADM999999Z', 'verified')
             `, [adminPass]);
             console.log('🌱 Seed: Created Admin user (admin@sphere.com / admin123)');

@@ -1,4 +1,4 @@
-import { bankAccountModel } from "../models/bankAccountModel";
+import { bankAccountModel } from "../models/bankAccountModel.js";
 
 /**
  * 1. Get linked bank accounts for current user

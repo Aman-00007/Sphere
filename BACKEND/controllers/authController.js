@@ -4,7 +4,7 @@ import bycrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import dotenv from "dotenv";
-import { use } from "react";
+
 
 dotenv.config();
 
@@ -323,7 +323,7 @@ export const getMe = async (req, res) => {
 /**
  * Update Profile
  */
-export const updatedProfile = async (req, res) => {
+export const updateProfile = async (req, res) => {
 
   const {
     first_name, lastnam, phone_number, monthly_income, emplymenttype_type,

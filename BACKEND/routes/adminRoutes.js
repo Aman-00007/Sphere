@@ -2,7 +2,7 @@ import express from "express";
 
 import {
     getAdminDashboardMetrics,
-    getAlApplications,
+    getAllApplications,
     updatedApplicationStatus,
     raiseAdminQuery,
     getNotificationLogs,
