@@ -17,25 +17,25 @@ export const bankProductModel = {
 
         if (loan_type && loan_type !== "ALL") {
             params.push(loan_type);
-            query += `AND LOWER(loan_type) = LOWER($${params.length})`;
+            query += ` AND LOWER(loan_type) = LOWER($${params.length})`;
         }
 
         if (bank_code && bank_code !== "ALL") {
             params.push(bank_code.toUpperCase());
-            query += `AND bank_code = $${params.length}`;
+            query += ` AND bank_code = $${params.length}`;
         }
 
         if (max_rate) {
             params.push(parseFloat(max_rate));
-            query += `AND interest_rate_max <= $${params.length}`;
+            query += ` AND interest_rate_max <= $${params.length}`;
         }
 
         if (min_amount) {
             params.push(parseFloat(min_amount));
-            query += `AND max_amount >= $${params.length}`;
+            query += ` AND max_amount >= $${params.length}`;
         }
 
-        query += " ORDER BY interest_min ASC, approval_rate_pct DESC";
+        query += " ORDER BY interest_rate_min ASC, approval_rate_pct DESC";
 
         const result = await pool.query(query, params);
         return result.rows;
