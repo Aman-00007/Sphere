@@ -76,9 +76,7 @@ export const getRecommendations = async (req, res) => {
       return res.json({ recommendations: [] });
     }
 
-    // Find the lowest interest rate
-
-    const lowestRate = Math.min(...products.map((p) => parseFloat(p.min_interest_rate)));
+    const lowestRate = Math.min(...products.map((p) => parseFloat(p.interest_rate_min)));
 
     // Score and badge each bank product 
 
