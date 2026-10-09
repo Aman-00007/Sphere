@@ -6,7 +6,7 @@ import {
   getDocumentByApplication,
   deleteDocument,
   verifyDocumentStatus,
-} from "../controllers/documentControllers.js"
+} from "../controllers/documentController.js"
 
 import { verifyToken, checkAdminRole } from "../middleware/authMiddleware.js";
 

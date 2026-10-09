@@ -6,7 +6,7 @@ import {
     updateBankProduct,
     deleteBankProduct,
     getRecommendations,
-} from "../controllers/bankControllers.js";
+} from "../controllers/bankController.js";
 
 import { verifyToken, checkAdminRole } from "../middleware/authMiddleware.js";
 const router = express.Router();

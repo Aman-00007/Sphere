@@ -2,7 +2,7 @@ import express from "express";
 import {
     getQueries,
     resolvedQuery
-} from "../controllers/queryControllers.js"
+} from "../controllers/queryController.js"
 
 import { verifyToken } from "../middleware/authMiddleware.js";
 

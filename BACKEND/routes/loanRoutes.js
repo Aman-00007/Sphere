@@ -7,7 +7,7 @@ import {
     getOngoingLoans,
     payEmi,
     calculatePayoffAccelerator
-} from "../controllers/loanControllers.js"
+} from "../controllers/loanController.js"
 
 import { verifyToken } from "../middleware/authMiddleware.js";
 
