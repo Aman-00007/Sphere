@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 import express from 'express';
@@ -8,6 +9,7 @@ import pool from './db.js';
 import initDb from './initDb.js';
 
 //Import all route modules
+import setuRoutes from './routes/setuRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import bankRoutes from './routes/bankRoutes.js';
 import loanRoutes from './routes/loanRoutes.js';
@@ -24,7 +26,11 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
+//Register the route somewhere below your other routes:
+app.use("/api/setu", setuRoutes);
+
 // Serve uploaded documents statically so frontend can view them
+
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 
 //Run database setup and table creation on server start
