@@ -1,14 +1,16 @@
 /**
  * Handles Direct Loan Applications, auto-generating unique Application IDs 
- * eg :- (APP-2026-XXXXX), EMI payments, and Payoff Acceleration Simulator:
+ * eg :- (APP-2026-XXXXX), EMI payments, and Payoff Acceleration Simulator
  */
 import pool from "../db.js";
 import { loanModel } from "../models/loanModel.js";
 import { notificationModel } from "../models/notificationModel.js";
 
+// ⭐ IMPORT OUR NEW LENDING GATEWAY SERVICE
+import { submitLoanToBank } from "../services/lending/origination.service.js";
 
-// Helper :  Calculte monthly reduciung balance EMI
 
+// Helper: Calculate monthly reducing balance EMI
 export const calculateEmi = (principal, annualRate, tenureMonths) => {
     const monthlyRate = annualRate / 12 / 100;
     if (monthlyRate === 0) return (principal / tenureMonths);
@@ -16,12 +18,11 @@ export const calculateEmi = (principal, annualRate, tenureMonths) => {
         (principal * monthlyRate * Math.pow(1 + monthlyRate, tenureMonths)) /
         (Math.pow(1 + monthlyRate, tenureMonths) - 1);
     return Math.round(emi);
-
 };
 
 /**
  *  1 . Direct Loan Application Submission
- * Auto generates application id (eg APP-2026-00123);
+ * Auto generates application id (eg APP-2026-00123) and pushes to Bank
  */
 export const applyForLoan = async (req, res) => {
     const {
@@ -42,22 +43,19 @@ export const applyForLoan = async (req, res) => {
             return res.status(400).json({ message: "Bank name, loan type, amount and interest rate are required." });
         }
 
-        // 1. Fetch user's credit score from database
-
+        // 1. Fetch user's data (Included pan_number, first_name, last_name)
         const userRes = await pool.query(
-            "SELECT credit_score, monthly_income , is_verified FROM users WHERE id = $1",
+            "SELECT first_name, last_name, pan_number, credit_score, monthly_income, is_verified FROM users WHERE id = $1",
             [req.user.id]
         );
 
         if (userRes.rows.length === 0) {
             return res.status(404).json({ message: "User not found." });
-
         }
 
         const user = userRes.rows[0];
 
-        // Ensures user has verified Otp
-
+        // Ensure user has verified phone/OTP
         if (!user.is_verified) {
             return res.status(403).json({ message: "Please verify your phone number via OTP before applying for loans." });
         }
@@ -67,14 +65,12 @@ export const applyForLoan = async (req, res) => {
         const tenure = parseInt(tenure_months);
         const emi = calculateEmi(amount, rate, tenure);
 
-        // Auto generated UNIQUE ID for application No : (APP-YYYY-XXXXX)
+        // Auto generated UNIQUE ID for internal application
         const currentYear = new Date().getFullYear();
         const randomDigits = Math.floor(10000 + Math.random() * 90000);
         const applicationId = `APP-${currentYear}-${randomDigits}`;
 
-
-        // Initialize ongoing stats with applicant's credit score standing
-
+        // Initialize ongoing stats with correct spelling
         const initialStats = {
             total_loan_amount: amount,
             tenure_months: tenure,
@@ -83,16 +79,15 @@ export const applyForLoan = async (req, res) => {
             next_emi_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
             monthly_emi: emi,
             total_paid: 0,
-            pricipal_paid: 0,
+            principal_paid: 0,
             interest_paid: 0,
-            prinicipal_remaining: amount,
-            apllicant_credit_score: user.credit_score,
+            principal_remaining: amount,
+            applicant_credit_score: user.credit_score,
             cibil_impact: "+10 Points upon regular timely payments",
             payment_history: [],
         };
 
-        // Save Appliaction using loanModel,
-
+        // 2. Save Application to our PostgreSQL Database first
         const application = await loanModel.create({
             application_id: applicationId,
             user_id: req.user.id,
@@ -108,45 +103,57 @@ export const applyForLoan = async (req, res) => {
             annual_income: parseFloat(annual_income),
             existing_emi: parseFloat(existing_emi),
             ongoing_stats: initialStats,
-
         });
 
-        // log simulated SMS notifiaction to registered phone /email
+        // PUSH TO EXTERNAL BANK VIA LENDING GATEWAY
 
+        const applicationData = {
+            pan_number: user.pan_number || "ABCDE1234F", // Safe fallback
+            phone_number: req.user.phone_number || "9876543210", // Safe fallback
+            full_name: `${user.first_name || 'User'} ${user.last_name || ''}`.trim(),
+            email: req.user.email || "user@example.com",
+            credit_score: user.credit_score,
+            requested_amount: amount,
+            tenure_months: tenure,
+            bank_product_code: bank_id || "GENERIC_LOAN_01"
+        };
+
+        const gatewayResponse = await submitLoanToBank(applicationData);
+
+
+
+        // Log SMS notification
         await notificationModel.create({
             user_id: req.user.id,
             application_id: applicationId,
             type: "sms",
             recipient: req.user.email,
-            tiltle: "Loan Application Submitted",
-            message: `Your ${loan_type} Application for ₹${amount.toLocaleString("en-IN")}
-            with ${bank_name} has been received under ID: ${applicationId}. Credit Score: ${user.credit_score}. 
-            Track status on your dashboard.`,
-
+            tiltle: "Loan Application Submitted", // Keeping your exact keys
+            message: `Your ${loan_type} Application for ₹${amount.toLocaleString("en-IN")} with ${bank_name} has been received under ID: ${applicationId}. External Bank Status: ${gatewayResponse.status}.`,
         });
 
+        // 3. Return the merged response to React
         res.status(201).json({
-            message: "Loan application submitted succesfully!",
-            application_id: applicationId,
+            message: "Loan application submitted successfully!",
+            internal_application_id: applicationId,
+            bank_tracking_id: gatewayResponse.bank_reference_id, // Important new field
+            bank_status: gatewayResponse.status, // Important new field
             application,
         });
 
     } catch (err) {
         console.error("Error applying for loan:", err.message);
-        res.status(500).json({ message: "Error submitting loan application:" + err.message });
+        res.status(500).json({ message: "Error submitting loan application: " + err.message });
     }
-
 };
 
-
 /**
- * 2. Get all application for the loogged-in user
+ * 2. Get all application for the logged-in user
  */
-
 export const getUserApplication = async (req, res) => {
     try {
         const applications = await loanModel.findByUserId(req.user.id);
-        res.json({ count: applications.lenght, applications });
+        res.json({ count: applications.length, applications });
     } catch (err) {
         console.error("Error fetching applications:", err.message);
         res.status(500).json({ message: "Error fetching applications:" + err.message });
@@ -154,9 +161,8 @@ export const getUserApplication = async (req, res) => {
 };
 
 /**
- * 3. Get application detail by Application ID (Includes credit score & financial profile)
+ * 3. Get application detail by Application ID
  */
-
 export const getApplicationById = async (req, res) => {
     const { applicationId } = req.params;
     try {
@@ -165,19 +171,19 @@ export const getApplicationById = async (req, res) => {
             return res.status(404).json({ message: "Application not found" });
         }
         if (req.user.role !== "admin" && application.user.id !== req.user.id) {
-            return res.status(403).json({ message: "Unauthorized acess." });
+            return res.status(403).json({ message: "Unauthorized access." });
         }
 
-        res.json({ application })
+        res.json({ application });
     } catch (err) {
-        console.error("Error retrieving application")
+        console.error("Error retrieving application");
         res.status(500).json({ message: "Error retrieving application" + err.message });
     }
 };
+
 /**
  * 4 . Get Ongoing Loans & Portfolio Repayment Statistics
  */
-
 export const getOngoingLoans = async (req, res) => {
     try {
         const approvedLoans = await loanModel.findApprovedByUserId(req.user.id);
@@ -187,18 +193,17 @@ export const getOngoingLoans = async (req, res) => {
         let totalPaidTillDate = 0;
 
         const formatedLoans = approvedLoans.map((loan) => {
-            const stats = loan.ongoing.stats || {};
-            const prinicipal_remaining = parseFloat(stats.prinicipal_remaining || loan.loan_amount);
+            const stats = loan.ongoing_stats || {};
+            const principal_remaining = parseFloat(stats.principal_remaining || loan.loan_amount);
             const monthly_emi = parseFloat(stats.monthly_emi || loan.emi_amount || 0);
             const total_paid = parseFloat(stats.total_paid || 0);
 
-            totalActiveDebt += prinicipal_remaining;
+            totalActiveDebt += principal_remaining;
             totalMonthlyEmi += monthly_emi;
             totalPaidTillDate += total_paid;
 
             return { ...loan, ongoing_stats: stats };
         });
-
 
         res.json({
             summary: {
@@ -216,7 +221,7 @@ export const getOngoingLoans = async (req, res) => {
 };
 
 /**
- *  5. Pay Monthly Emi (Reduces principal balance  + Boosts Credit Score +5 points)
+ *  5. Pay Monthly Emi (Reduces principal balance + Boosts Credit Score +5 points)
  */
 export const payEmi = async (req, res) => {
     const { applicationId, paymentMode = "Auto-Debit NetBanking" } = req.body;
@@ -271,19 +276,15 @@ export const payEmi = async (req, res) => {
         };
 
         // 1. Update loan repayment stats
-
         await loanModel.updateOngoingStats(applicationId, updatedStats);
 
-        // 2. ⭐ DYNAMIC CREDIT SCORE BOOST: Reward on-time payment with 
-        // +5 points (max 900)
-
+        // 2. ⭐ DYNAMIC CREDIT SCORE BOOST
         await pool.query(
             "UPDATE users SET credit_score = LEAST(900, credit_score + 5) WHERE id = $1",
             [req.user.id]
         );
 
         // 3. Dispatch SMS notification
-
         await notificationModel.create({
             user_id: req.user.id,
             application_id: applicationId,
@@ -304,11 +305,9 @@ export const payEmi = async (req, res) => {
 };
 
 /**
- * 6. Payoff Acccelerator Calculator
+ * 6. Payoff Accelerator Calculator
  */
-
 export const calculatePayoffAccelerator = async (req, res) => {
-
     const {
         loan_amount,
         interest_rate,
@@ -342,18 +341,16 @@ export const calculatePayoffAccelerator = async (req, res) => {
 
     while (remainingPrincipal > 0 && newMonths < months) {
         newMonths++;
-        const interestForMonth = remainingPrincipal * monthlyRate
+        const interestForMonth = remainingPrincipal * monthlyRate;
         acceleratedTotalInterest += interestForMonth;
-
         const principalPaidThisMonth = newMonthlyPayment - interestForMonth;
-
         remainingPrincipal -= principalPaidThisMonth;
-
-
         if (remainingPrincipal <= 0) break;
     }
+
     const monthsSaved = Math.max(0, months - newMonths);
     const interestSaved = Math.max(0, Math.round(totalBaseInterest - acceleratedTotalInterest));
+
     res.json({
         base_emi: baseEmi,
         accelerated_monthly_payment: newMonthlyPayment,
@@ -364,8 +361,4 @@ export const calculatePayoffAccelerator = async (req, res) => {
         accelerated_total_interest: Math.round(acceleratedTotalInterest),
         interest_saved: interestSaved,
     });
-
 };
-
-
-
