@@ -27,7 +27,7 @@ export const notificationModel = {
                 recipient,
                 title,
                 message 
-             VALUES ( $1, $2, $3, $4, $5, $6 )
+            ) VALUES ( $1, $2, $3, $4, $5, $6 )
              RETURNING * `,
             [user_id, application_id || null, type, recipient, title, message]
         );
@@ -38,7 +38,7 @@ export const notificationModel = {
 
     async findUserById(userId) {
         const result = await pool.query(`
-        SELECT *FROM notifiactions WHERE user_id = $1 ORDER BY sent_at DESC LIMIT 50`,
+        SELECT *FROM notifications WHERE user_id = $1 ORDER BY sent_at DESC LIMIT 50`,
             [userId]);
         return result.rows;
     },

@@ -127,8 +127,8 @@ export const applyForLoan = async (req, res) => {
             user_id: req.user.id,
             application_id: applicationId,
             type: "sms",
-            recipient: req.user.email,
-            tiltle: "Loan Application Submitted", // Keeping your exact keys
+            recipient: req.user.email || 9876543210,
+            title: "Loan Application Submitted", // Keeping your exact keys
             message: `Your ${loan_type} Application for ₹${amount.toLocaleString("en-IN")} with ${bank_name} has been received under ID: ${applicationId}. External Bank Status: ${gatewayResponse.status}.`,
         });
 
