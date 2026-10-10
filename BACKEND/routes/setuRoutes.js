@@ -1,7 +1,6 @@
 import express from 'express';
 import { createConsentRequest } from '../services/setu_aa/consent.service.js';
 import { handleSetuWebhook } from '../services/setu_aa/webhook.service.js';
-import { verifyToken } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -10,7 +9,7 @@ const router = express.Router();
  * Our React Frontend will call this when user clicks 'Verify Bank Account'
  */
 
-router.post('generate=link', async (req, res) => {
+router.post('/generate-link', async (req, res) => {
     try {
         // In a real app, you get this from our auth token (e.g., req.user.phone_number)
         // We are using req.body so you can easily test it in Postman
@@ -22,7 +21,7 @@ router.post('generate=link', async (req, res) => {
 
         // Send the redirect URL back to React
 
-        res.json(200).json({
+        res.status(200).json({
             message: "Consent Link generated successfully",
             consentId: setuData.consentId,
             approval_url: setuData.url
